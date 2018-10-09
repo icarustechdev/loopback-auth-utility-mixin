@@ -1,14 +1,7 @@
 var nodemailer = require('nodemailer');
 var path = require('path');
-var aws = require('aws-sdk');
 
 module.exports = function (Model, options) {
-	aws.config.region = process.env.AWS_DEFAULT_REGION || 'us-west-2';
-	var transporter = nodemailer.createTransport({
-		SES: new aws.SES({
-			apiVersion: '2010-12-01'
-		})
-	});
 
     Model.on('attached' , function () {
 
@@ -68,19 +61,35 @@ module.exports = function (Model, options) {
     });
 
     Model.on('resetPasswordRequest', function (info) {
+
         var settings = Model.app.settings;
-        var html = 'Click on <a href="'+settings.protocol+'://'+settings.host+':'+settings.port+'/confirm-password-reset?access_token=' + info.accessToken.id + '">this</a> url to reset your password';
-        transporter.sendMail({
-            from: process.env.RESET_PASSWORD_EMAIL,
-            to: info.user.email,
-            subject: 'Reset your password',
-            html: html
-        }, function (err, success) {
-        	if(err)
-				console.log('error from the mailer', err);
-        	else
-        		console.log('success from the mailer', success);
+        var emailSetupDb = Model.app.models.EmailSetup;
+        emailSetupDb.findOne({}, function(emailSetup) {
+
+            var transporter = nodemailer.createTransport({
+                host: emailSetup.type + "." + emailSetup.name,
+                port: emailSetup.output_smtp,
+                secure: emailSetup.with_ssl,
+                auth: {
+                    user: emailSetup.user,
+                    pass: emailSetup.password
+                }
+            });
+
+            var html = 'Clique neste <a href="'+settings.protocol+'://'+settings.host+':'+settings.port+'/confirm-password-reset?access_token=' + info.accessToken.id + '">link</a> para alterar a sua senha';
+            transporter.sendMail({
+                from: emailSetup.email,
+                to: info.user.email,
+                subject: 'Altere sua senha',
+                html: html
+            }, function (err, success) {
+                if(err)
+                    console.log('error from the mailer', err);
+                else
+                    console.log('success from the mailer', success);
+            });
         });
+
     });
 
 };
